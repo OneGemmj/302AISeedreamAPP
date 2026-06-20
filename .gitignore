@@ -1,0 +1,20 @@
+.gradle/
+.idea/
+.kotlin/
+build/
+app/build/
+local.properties
+captures/
+*.iml
+
+# Local machines and secrets
+*.jks
+*.keystore
+*.p12
+*.env
+.env
+
+# Generated release artifacts. Publish APKs through GitHub Releases instead.
+*.apk
+*.aab
+outputs/
