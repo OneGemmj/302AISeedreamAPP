@@ -54,3 +54,28 @@ For a manually built APK, use the same file naming pattern:
 ```text
 Seedream-302-v1.2.0-debug.apk
 ```
+
+## Troubleshooting
+
+If a release APK does not appear on GitHub:
+
+1. Confirm the tag was pushed:
+
+```powershell
+git push origin v1.1.0
+```
+
+2. If the tag already exists on GitHub but was created before the workflow file existed, recreate it:
+
+```powershell
+git push origin :refs/tags/v1.1.0
+git tag -d v1.1.0
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+3. To upload a locally built APK manually:
+
+```powershell
+gh release upload v1.1.0 app\build\outputs\apk\debug\app-debug.apk --repo OneGemmj/SeedreamAPP --clobber
+```
