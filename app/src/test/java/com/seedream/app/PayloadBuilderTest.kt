@@ -26,6 +26,7 @@ class PayloadBuilderTest {
                 stream = "true",
                 sequentialImageGeneration = "auto",
                 maxImages = "3",
+                outputFormat = "png",
                 webSearch = "true"
             )
         )
@@ -40,6 +41,7 @@ class PayloadBuilderTest {
         assertEquals("auto", json.getString("sequential_image_generation"))
         assertEquals(3, json.getInt("max_images"))
         assertEquals(3, json.getJSONObject("sequential_image_generation_options").getInt("max_images"))
+        assertEquals("png", json.getString("output_format"))
         assertEquals("web_search", json.getJSONArray("tools").getJSONObject(0).getString("type"))
     }
 
@@ -49,7 +51,9 @@ class PayloadBuilderTest {
             baseInput(model = MODEL_SEEDREAM_4_5, webSearch = "true")
         )
 
-        assertFalse(request.toJsonObject().has("tools"))
+        val json = request.toJsonObject()
+        assertFalse(json.has("tools"))
+        assertFalse(json.has("output_format"))
     }
 
     @Test
@@ -82,6 +86,7 @@ class PayloadBuilderTest {
         stream: String = "false",
         sequentialImageGeneration: String = "disabled",
         maxImages: String = "",
+        outputFormat: String = "jpeg",
         webSearch: String = "false"
     ): RequestInput {
         return RequestInput(
@@ -95,6 +100,7 @@ class PayloadBuilderTest {
             stream = stream,
             sequentialImageGeneration = sequentialImageGeneration,
             maxImages = maxImages,
+            outputFormat = outputFormat,
             webSearch = webSearch
         )
     }

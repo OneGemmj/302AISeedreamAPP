@@ -46,6 +46,7 @@ data class SeedreamRequest(
     val stream: Boolean? = false,
     val sequentialImageGeneration: String? = "disabled",
     val maxImages: Int? = null,
+    val outputFormat: String? = "jpeg",
     val webSearch: Boolean = false
 ) {
     fun toJsonObject(): JSONObject {
@@ -70,6 +71,9 @@ data class SeedreamRequest(
                 "sequential_image_generation_options",
                 JSONObject().put("max_images", maxImages)
             )
+        }
+        if (model.startsWith("doubao-seedream-5-") && !outputFormat.isNullOrBlank()) {
+            json.put("output_format", outputFormat)
         }
         if (webSearch && model.startsWith("doubao-seedream-5-")) {
             json.put("tools", JSONArray().put(JSONObject().put("type", "web_search")))
@@ -113,6 +117,7 @@ data class RequestInput(
     val stream: String,
     val sequentialImageGeneration: String,
     val maxImages: String,
+    val outputFormat: String,
     val webSearch: String
 )
 
@@ -131,6 +136,7 @@ fun buildSeedreamRequest(input: RequestInput): SeedreamRequest {
         stream = normalizeBoolean(input.stream),
         sequentialImageGeneration = input.sequentialImageGeneration.takeIf { it.isNotBlank() },
         maxImages = maxImages,
+        outputFormat = input.outputFormat.takeIf { it.isNotBlank() },
         webSearch = input.webSearch == "true"
     )
 }

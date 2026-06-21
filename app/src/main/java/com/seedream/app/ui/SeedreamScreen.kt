@@ -93,6 +93,7 @@ import com.seedream.app.model.ReferenceImage
 import com.seedream.app.model.ReferenceKind
 import com.seedream.app.model.ResultImage
 import com.seedream.app.model.StatusKind
+import com.seedream.app.network.SearchProvider
 import com.seedream.app.storage.HistoryEntity
 
 @Composable
@@ -248,11 +249,17 @@ fun SeedreamScreen(state: SeedreamUiState, viewModel: SeedreamViewModel) {
             onSizeChange = viewModel::setSize,
             onSeedChange = viewModel::setSeed,
             onFormatChange = viewModel::setResponseFormat,
+            onOutputFormatChange = viewModel::setOutputFormat,
             onWatermarkChange = viewModel::setWatermark,
             onStreamChange = viewModel::setStream,
             onSequentialChange = viewModel::setSequentialMode,
             onMaxImagesChange = viewModel::setMaxImages,
-            onWebSearchChange = viewModel::setWebSearch
+            onWebSearchChange = viewModel::setWebSearch,
+            onExternalSearchChange = viewModel::setExternalSearch,
+            onSearchProviderChange = viewModel::setSearchProvider,
+            onSearchApiKeyChange = viewModel::setSearchApiKey,
+            onSaveSearchApiKey = viewModel::saveSearchApiKey,
+            onClearSearchApiKey = viewModel::clearSearchApiKey
         )
     }
 
@@ -797,6 +804,12 @@ private fun DebugTab(state: SeedreamUiState) {
             Text("请求体预览", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             CodeBlock(state.payloadPreview, modifier = Modifier.heightIn(min = 110.dp, max = 220.dp))
         }
+        if (state.searchSummary.isNotBlank()) {
+            SurfacePanel {
+                Text("外部搜索摘要", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                CodeBlock(state.searchSummary, modifier = Modifier.heightIn(min = 90.dp, max = 180.dp))
+            }
+        }
         SurfacePanel(modifier = Modifier.weight(1f)) {
             Text("原始返回", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             CodeBlock(state.rawResponse, modifier = Modifier.weight(1f))
@@ -863,11 +876,17 @@ private fun ParamsDialog(
     onSizeChange: (String) -> Unit,
     onSeedChange: (String) -> Unit,
     onFormatChange: (String) -> Unit,
+    onOutputFormatChange: (String) -> Unit,
     onWatermarkChange: (String) -> Unit,
     onStreamChange: (String) -> Unit,
     onSequentialChange: (String) -> Unit,
     onMaxImagesChange: (String) -> Unit,
-    onWebSearchChange: (String) -> Unit
+    onWebSearchChange: (String) -> Unit,
+    onExternalSearchChange: (String) -> Unit,
+    onSearchProviderChange: (String) -> Unit,
+    onSearchApiKeyChange: (String) -> Unit,
+    onSaveSearchApiKey: () -> Unit,
+    onClearSearchApiKey: () -> Unit
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -888,6 +907,14 @@ private fun ParamsDialog(
                     )
                 }
                 item { OptionDropdown("response_format", state.responseFormat, listOf("url" to "url", "b64_json" to "b64_json"), onFormatChange) }
+                item {
+                    OptionDropdown(
+                        "output_format（5.0 输出文件格式）",
+                        state.outputFormat,
+                        listOf("" to "默认", "jpeg" to "jpeg", "png" to "png"),
+                        onOutputFormatChange
+                    )
+                }
                 item { OptionDropdown("watermark", state.watermark, listOf("" to "默认", "false" to "false", "true" to "true"), onWatermarkChange) }
                 item { OptionDropdown("stream（流式）", state.stream, listOf("false" to "false", "true" to "true"), onStreamChange) }
                 item {
@@ -909,11 +936,71 @@ private fun ParamsDialog(
                 }
                 item {
                     OptionDropdown(
-                        "联网搜索（5.0 常用）",
+                        "联网搜索（仅 5.0，写入 tools）",
                         state.webSearch,
-                        listOf("false" to "false", "true" to "true（tools: web_search）"),
+                        listOf("false" to "关闭", "true" to "开启：tools[{type=web_search}]"),
                         onWebSearchChange
                     )
+                }
+                item {
+                    Text(
+                        "开启后请求体会加入 tools: [{ type: \"web_search\" }]；模型会根据提示词自主判断是否搜索，可能增加延迟和费用。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                item {
+                    OptionDropdown(
+                        "外部联网搜索（发送前强制检索）",
+                        state.externalSearch,
+                        listOf("false" to "关闭", "true" to "开启"),
+                        onExternalSearchChange
+                    )
+                }
+                if (state.externalSearch == "true") {
+                    item {
+                        OptionDropdown(
+                            "搜索服务",
+                            state.searchProvider,
+                            SearchProvider.entries.map { it.id to it.label },
+                            onSearchProviderChange
+                        )
+                    }
+                    item {
+                        val provider = SearchProvider.fromId(state.searchProvider)
+                        if (provider.requiresApiKey) {
+                            OutlinedTextField(
+                                value = state.searchApiKey,
+                                onValueChange = onSearchApiKeyChange,
+                                label = { Text("${provider.label} API Key") },
+                                visualTransformation = PasswordVisualTransformation(),
+                                maxLines = 2,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            CompactButtonRow {
+                                ToolButton("保存搜索 Key", Icons.Default.Save, onSaveSearchApiKey)
+                                ToolButton("清空", Icons.Default.Clear, onClearSearchApiKey, danger = true)
+                            }
+                        } else {
+                            Text(
+                                "DuckDuckGo 使用公开 Instant Answer API，不需要 API Key；它不是完整搜索结果 API，结果可能较少。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    item {
+                        Text(
+                            "外部搜索会先把检索摘要追加到 Prompt，再发送给 302.ai 生图接口；这比模型 tools 更可控。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    if (state.searchSummary.isNotBlank()) {
+                        item {
+                            CodeBlock(state.searchSummary, modifier = Modifier.heightIn(min = 80.dp, max = 160.dp))
+                        }
+                    }
                 }
             }
         },

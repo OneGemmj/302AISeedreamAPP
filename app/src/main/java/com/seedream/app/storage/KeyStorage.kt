@@ -15,22 +15,46 @@ class KeyStorage(context: Context) {
     private val prefs: SharedPreferences = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     fun saveApiKey(apiKey: String) {
+        saveSecret("api_key", apiKey)
+    }
+
+    fun loadApiKey(): String {
+        return loadSecret("api_key")
+    }
+
+    fun clearApiKey() {
+        clearSecret("api_key")
+    }
+
+    fun saveSearchApiKey(providerId: String, apiKey: String) {
+        saveSecret("search_$providerId", apiKey)
+    }
+
+    fun loadSearchApiKey(providerId: String): String {
+        return loadSecret("search_$providerId")
+    }
+
+    fun clearSearchApiKey(providerId: String) {
+        clearSecret("search_$providerId")
+    }
+
+    private fun saveSecret(name: String, apiKey: String) {
         if (apiKey.isBlank()) {
-            clearApiKey()
+            clearSecret(name)
             return
         }
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, getOrCreateSecretKey())
         val cipherText = cipher.doFinal(apiKey.toByteArray(Charsets.UTF_8))
         prefs.edit()
-            .putString(KEY_CIPHER, Base64.encodeToString(cipherText, Base64.NO_WRAP))
-            .putString(KEY_IV, Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
+            .putString("${name}_cipher", Base64.encodeToString(cipherText, Base64.NO_WRAP))
+            .putString("${name}_iv", Base64.encodeToString(cipher.iv, Base64.NO_WRAP))
             .apply()
     }
 
-    fun loadApiKey(): String {
-        val cipherText = prefs.getString(KEY_CIPHER, null) ?: return ""
-        val iv = prefs.getString(KEY_IV, null) ?: return ""
+    private fun loadSecret(name: String): String {
+        val cipherText = prefs.getString("${name}_cipher", null) ?: return ""
+        val iv = prefs.getString("${name}_iv", null) ?: return ""
         return runCatching {
             val cipher = Cipher.getInstance(TRANSFORMATION)
             cipher.init(
@@ -42,8 +66,8 @@ class KeyStorage(context: Context) {
         }.getOrDefault("")
     }
 
-    fun clearApiKey() {
-        prefs.edit().remove(KEY_CIPHER).remove(KEY_IV).apply()
+    private fun clearSecret(name: String) {
+        prefs.edit().remove("${name}_cipher").remove("${name}_iv").apply()
     }
 
     private fun getOrCreateSecretKey(): SecretKey {
@@ -67,8 +91,6 @@ class KeyStorage(context: Context) {
     private companion object {
         const val PREFS = "secure_key"
         const val KEY_ALIAS = "seedream_api_key"
-        const val KEY_CIPHER = "api_key_cipher"
-        const val KEY_IV = "api_key_iv"
         const val ANDROID_KEYSTORE = "AndroidKeyStore"
         const val TRANSFORMATION = "AES/GCM/NoPadding"
     }

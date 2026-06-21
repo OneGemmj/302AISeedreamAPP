@@ -18,6 +18,9 @@ import com.seedream.app.model.SeedreamRequest
 import com.seedream.app.model.StatusKind
 import com.seedream.app.model.buildSeedreamRequest
 import com.seedream.app.model.parseUrlReferenceImages
+import com.seedream.app.network.SearchClient
+import com.seedream.app.network.SearchProvider
+import com.seedream.app.network.SearchResult
 import com.seedream.app.network.SeedreamApiClient
 import com.seedream.app.service.GenerationEvent
 import com.seedream.app.service.GenerationEvents
@@ -42,12 +45,16 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
     private val keyStorage = KeyStorage(application)
     private val historyRepository = HistoryRepository(application)
     private val latencyClient = SeedreamApiClient().newLatencyClient()
+    private val searchClient = SearchClient()
     private val referencePayloads = mutableMapOf<String, String>()
     private var lastRequest: SeedreamRequest? = null
     private var latencyJob: Job? = null
 
     private val _uiState = MutableStateFlow(
-        SeedreamUiState(apiKey = keyStorage.loadApiKey())
+        SeedreamUiState(
+            apiKey = keyStorage.loadApiKey(),
+            searchApiKey = keyStorage.loadSearchApiKey(SearchProvider.Tavily.id)
+        )
     )
     val uiState: StateFlow<SeedreamUiState> = _uiState
 
@@ -64,7 +71,12 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
 
     fun setApiKey(value: String) = _uiState.update { it.copy(apiKey = value) }
     fun setEndpoint(value: String) = _uiState.update { it.copy(endpoint = value) }
-    fun setModel(value: String) = _uiState.update { it.copy(model = value) }
+    fun setModel(value: String) = _uiState.update {
+        it.copy(
+            model = value,
+            webSearch = if (value == MODEL_SEEDREAM_4_5) "false" else it.webSearch
+        )
+    }
     fun setPrompt(value: String) = _uiState.update { it.copy(prompt = value) }
     fun setSize(value: String) = _uiState.update { it.copy(size = value) }
     fun setSeed(value: String) = _uiState.update { it.copy(seed = value) }
@@ -73,7 +85,16 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
     fun setStream(value: String) = _uiState.update { it.copy(stream = value) }
     fun setSequentialMode(value: String) = _uiState.update { it.copy(sequentialMode = value) }
     fun setMaxImages(value: String) = _uiState.update { it.copy(maxImages = value) }
+    fun setOutputFormat(value: String) = _uiState.update { it.copy(outputFormat = value) }
     fun setWebSearch(value: String) = _uiState.update { it.copy(webSearch = value) }
+    fun setExternalSearch(value: String) = _uiState.update { it.copy(externalSearch = value) }
+    fun setSearchProvider(value: String) = _uiState.update {
+        it.copy(
+            searchProvider = value,
+            searchApiKey = keyStorage.loadSearchApiKey(value)
+        )
+    }
+    fun setSearchApiKey(value: String) = _uiState.update { it.copy(searchApiKey = value) }
     fun setHistorySearch(value: String) = _uiState.update { it.copy(historySearch = value) }
     fun toggleHistory() = _uiState.update { it.copy(historyOpen = !it.historyOpen) }
     fun openImage(src: String) = _uiState.update { it.copy(fullScreenImage = src) }
@@ -98,6 +119,19 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
         keyStorage.clearApiKey()
         _uiState.update { it.copy(apiKey = "") }
         setStatus("已清空 API Key", StatusKind.Muted)
+    }
+
+    fun saveSearchApiKey() {
+        val state = _uiState.value
+        keyStorage.saveSearchApiKey(state.searchProvider, state.searchApiKey)
+        setStatus("已保存搜索服务 API Key", StatusKind.Ok)
+    }
+
+    fun clearSearchApiKey() {
+        val provider = _uiState.value.searchProvider
+        keyStorage.clearSearchApiKey(provider)
+        _uiState.update { it.copy(searchApiKey = "") }
+        setStatus("已清空搜索服务 API Key", StatusKind.Muted)
     }
 
     fun setUrlImagesText(text: String) {
@@ -164,6 +198,12 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun send(context: Context) {
+        viewModelScope.launch {
+            sendInternal(context.applicationContext)
+        }
+    }
+
+    private suspend fun sendInternal(context: Context) {
         val state = _uiState.value
         val apiKey = state.apiKey.trim()
         val endpoint = state.endpoint.trim()
@@ -176,7 +216,8 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
             return
         }
 
-        val request = buildSeedreamRequest(state.toRequestInput())
+        val baseRequest = buildSeedreamRequest(state.toRequestInput())
+        val request = withExternalSearchIfNeeded(baseRequest, state)
         if (request.prompt.isBlank()) {
             setStatus("prompt 不能为空", StatusKind.Error)
             return
@@ -364,8 +405,66 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
             stream = stream,
             sequentialImageGeneration = sequentialMode,
             maxImages = maxImages,
+            outputFormat = outputFormat,
             webSearch = webSearch
         )
+    }
+
+    private suspend fun withExternalSearchIfNeeded(request: SeedreamRequest, state: SeedreamUiState): SeedreamRequest {
+        if (state.externalSearch != "true") {
+            _uiState.update { it.copy(searchSummary = "") }
+            return request
+        }
+
+        val provider = SearchProvider.fromId(state.searchProvider)
+        val searchKey = state.searchApiKey.trim()
+        if (provider.requiresApiKey && searchKey.isBlank()) {
+            setStatus("请先填写并保存 ${provider.label} 的搜索 API Key", StatusKind.Error)
+            return request.copy(prompt = "")
+        }
+
+        setStatus("正在通过 ${provider.label} 联网搜索...", StatusKind.Muted)
+        val results = runCatching {
+            withContext(Dispatchers.IO) {
+                searchClient.search(provider, request.prompt, searchKey)
+            }
+        }.getOrElse { error ->
+            _uiState.update { it.copy(searchSummary = "搜索失败：${error.message.orEmpty()}") }
+            setStatus("${provider.label} 搜索失败：${error.message}", StatusKind.Error)
+            return request.copy(prompt = "")
+        }
+        if (results.isEmpty()) {
+            _uiState.update { it.copy(searchSummary = "未检索到可用结果，已使用原 Prompt。") }
+            setStatus("${provider.label} 未返回可用搜索结果，继续使用原 Prompt", StatusKind.Warn)
+            return request
+        }
+
+        val contextBlock = results.toPromptContext(provider)
+        _uiState.update { it.copy(searchSummary = contextBlock) }
+        setStatus("已检索 ${results.size} 条结果，正在发送到 302.ai...", StatusKind.Ok)
+        return request.copy(prompt = request.prompt.appendSearchContext(contextBlock))
+    }
+
+    private fun List<SearchResult>.toPromptContext(provider: SearchProvider): String {
+        return buildString {
+            appendLine("Search provider: ${provider.label}")
+            this@toPromptContext.forEachIndexed { index, result ->
+                appendLine("${index + 1}. ${result.title}".take(240))
+                if (result.snippet.isNotBlank()) appendLine("   ${result.snippet}".take(700))
+                if (result.url.isNotBlank()) appendLine("   Source: ${result.url}".take(400))
+            }
+        }.trim()
+    }
+
+    private fun String.appendSearchContext(contextBlock: String): String {
+        return """
+            $this
+
+            [联网检索资料]
+            $contextBlock
+
+            请优先参考以上联网检索资料中的事实、时间、名称、颜色、外观和场景信息来生成图片；不要在画面中绘制网址或检索列表文字，除非原始提示词明确要求。
+        """.trimIndent()
     }
 
     private fun Uri.toReferenceImage(context: Context): EncodedReferenceImage? {
