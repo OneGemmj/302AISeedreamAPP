@@ -10,7 +10,9 @@ import android.util.Base64
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.seedream.app.model.DEFAULT_ENDPOINT
 import com.seedream.app.model.MODEL_SEEDREAM_4_5
+import com.seedream.app.model.MODEL_SEEDREAM_5
 import com.seedream.app.model.ReferenceImage
 import com.seedream.app.model.ReferenceKind
 import com.seedream.app.model.RequestInput
@@ -28,6 +30,7 @@ import com.seedream.app.service.GenerationForegroundService
 import com.seedream.app.storage.HistoryEntity
 import com.seedream.app.storage.HistoryRepository
 import com.seedream.app.storage.KeyStorage
+import com.seedream.app.storage.SettingsStorage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -43,6 +46,7 @@ import kotlin.system.measureTimeMillis
 
 class SeedreamViewModel(application: Application) : AndroidViewModel(application) {
     private val keyStorage = KeyStorage(application)
+    private val settingsStorage = SettingsStorage(application)
     private val historyRepository = HistoryRepository(application)
     private val latencyClient = SeedreamApiClient().newLatencyClient()
     private val searchClient = SearchClient()
@@ -53,7 +57,20 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
     private val _uiState = MutableStateFlow(
         SeedreamUiState(
             apiKey = keyStorage.loadApiKey(),
-            searchApiKey = keyStorage.loadSearchApiKey(SearchProvider.Tavily.id)
+            endpoint = settingsStorage.getSetting("endpoint", DEFAULT_ENDPOINT),
+            model = settingsStorage.getSetting("model", MODEL_SEEDREAM_5),
+            size = settingsStorage.getSetting("size", "2K"),
+            seed = settingsStorage.getSetting("seed", ""),
+            responseFormat = settingsStorage.getSetting("responseFormat", "url"),
+            watermark = settingsStorage.getSetting("watermark", "false"),
+            stream = settingsStorage.getSetting("stream", "false"),
+            sequentialMode = settingsStorage.getSetting("sequentialMode", "disabled"),
+            maxImages = settingsStorage.getSetting("maxImages", ""),
+            outputFormat = settingsStorage.getSetting("outputFormat", "jpeg"),
+            webSearch = settingsStorage.getSetting("webSearch", "false"),
+            externalSearch = settingsStorage.getSetting("externalSearch", "false"),
+            searchProvider = settingsStorage.getSetting("searchProvider", "tavily"),
+            searchApiKey = keyStorage.loadSearchApiKey(settingsStorage.getSetting("searchProvider", "tavily"))
         )
     )
     val uiState: StateFlow<SeedreamUiState> = _uiState
@@ -70,29 +87,71 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun setApiKey(value: String) = _uiState.update { it.copy(apiKey = value) }
-    fun setEndpoint(value: String) = _uiState.update { it.copy(endpoint = value) }
-    fun setModel(value: String) = _uiState.update {
-        it.copy(
-            model = value,
-            webSearch = if (value == MODEL_SEEDREAM_4_5) "false" else it.webSearch
-        )
+    fun setEndpoint(value: String) {
+        settingsStorage.saveSetting("endpoint", value)
+        _uiState.update { it.copy(endpoint = value) }
+    }
+    fun setModel(value: String) {
+        settingsStorage.saveSetting("model", value)
+        _uiState.update {
+            it.copy(
+                model = value,
+                webSearch = if (value == MODEL_SEEDREAM_4_5) {
+                    settingsStorage.saveSetting("webSearch", "false")
+                    "false"
+                } else it.webSearch
+            )
+        }
     }
     fun setPrompt(value: String) = _uiState.update { it.copy(prompt = value) }
-    fun setSize(value: String) = _uiState.update { it.copy(size = value) }
-    fun setSeed(value: String) = _uiState.update { it.copy(seed = value) }
-    fun setResponseFormat(value: String) = _uiState.update { it.copy(responseFormat = value) }
-    fun setWatermark(value: String) = _uiState.update { it.copy(watermark = value) }
-    fun setStream(value: String) = _uiState.update { it.copy(stream = value) }
-    fun setSequentialMode(value: String) = _uiState.update { it.copy(sequentialMode = value) }
-    fun setMaxImages(value: String) = _uiState.update { it.copy(maxImages = value) }
-    fun setOutputFormat(value: String) = _uiState.update { it.copy(outputFormat = value) }
-    fun setWebSearch(value: String) = _uiState.update { it.copy(webSearch = value) }
-    fun setExternalSearch(value: String) = _uiState.update { it.copy(externalSearch = value) }
-    fun setSearchProvider(value: String) = _uiState.update {
-        it.copy(
-            searchProvider = value,
-            searchApiKey = keyStorage.loadSearchApiKey(value)
-        )
+    fun setSize(value: String) {
+        settingsStorage.saveSetting("size", value)
+        _uiState.update { it.copy(size = value) }
+    }
+    fun setSeed(value: String) {
+        settingsStorage.saveSetting("seed", value)
+        _uiState.update { it.copy(seed = value) }
+    }
+    fun setResponseFormat(value: String) {
+        settingsStorage.saveSetting("responseFormat", value)
+        _uiState.update { it.copy(responseFormat = value) }
+    }
+    fun setWatermark(value: String) {
+        settingsStorage.saveSetting("watermark", value)
+        _uiState.update { it.copy(watermark = value) }
+    }
+    fun setStream(value: String) {
+        settingsStorage.saveSetting("stream", value)
+        _uiState.update { it.copy(stream = value) }
+    }
+    fun setSequentialMode(value: String) {
+        settingsStorage.saveSetting("sequentialMode", value)
+        _uiState.update { it.copy(sequentialMode = value) }
+    }
+    fun setMaxImages(value: String) {
+        settingsStorage.saveSetting("maxImages", value)
+        _uiState.update { it.copy(maxImages = value) }
+    }
+    fun setOutputFormat(value: String) {
+        settingsStorage.saveSetting("outputFormat", value)
+        _uiState.update { it.copy(outputFormat = value) }
+    }
+    fun setWebSearch(value: String) {
+        settingsStorage.saveSetting("webSearch", value)
+        _uiState.update { it.copy(webSearch = value) }
+    }
+    fun setExternalSearch(value: String) {
+        settingsStorage.saveSetting("externalSearch", value)
+        _uiState.update { it.copy(externalSearch = value) }
+    }
+    fun setSearchProvider(value: String) {
+        settingsStorage.saveSetting("searchProvider", value)
+        _uiState.update {
+            it.copy(
+                searchProvider = value,
+                searchApiKey = keyStorage.loadSearchApiKey(value)
+            )
+        }
     }
     fun setSearchApiKey(value: String) = _uiState.update { it.copy(searchApiKey = value) }
     fun setHistorySearch(value: String) = _uiState.update { it.copy(historySearch = value) }
@@ -190,6 +249,17 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
         referencePayloads.remove(id)
         _uiState.update { state ->
             val list = state.references.filterNot { it.id == id }
+            state.copy(
+                references = list,
+                urlImagesText = list.filter { it.kind == ReferenceKind.Url }.joinToString("\n") { it.value }
+            )
+        }
+    }
+
+    fun deleteMultipleReferences(ids: List<String>) {
+        ids.forEach { referencePayloads.remove(it) }
+        _uiState.update { state ->
+            val list = state.references.filterNot { it.id in ids }
             state.copy(
                 references = list,
                 urlImagesText = list.filter { it.kind == ReferenceKind.Url }.joinToString("\n") { it.value }

@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -67,6 +69,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -191,6 +194,7 @@ fun SeedreamScreen(state: SeedreamUiState, viewModel: SeedreamViewModel) {
                     onClearReferences = viewModel::clearReferences,
                     onMoveReference = viewModel::moveReference,
                     onDeleteReference = viewModel::deleteReference,
+                    onDeleteMultipleReferences = viewModel::deleteMultipleReferences,
                     onPreview = viewModel::openImage,
                     onSend = { viewModel.send(context) },
                     onStop = { viewModel.stop(context) },
@@ -323,6 +327,7 @@ private fun CreateTab(
     onClearReferences: () -> Unit,
     onMoveReference: (String, Int) -> Unit,
     onDeleteReference: (String) -> Unit,
+    onDeleteMultipleReferences: (List<String>) -> Unit,
     onPreview: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
@@ -331,7 +336,9 @@ private fun CreateTab(
     onGoResults: () -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         StatusPanel(state = state, onRetry = onRetry)
@@ -363,8 +370,9 @@ private fun CreateTab(
             onClearReferences = onClearReferences,
             onMoveReference = onMoveReference,
             onDeleteReference = onDeleteReference,
+            onDeleteMultipleReferences = onDeleteMultipleReferences,
             onPreview = onPreview,
-            modifier = Modifier.weight(1f)
+            modifier = Modifier.fillMaxWidth()
         )
 
         state.resultImages.lastOrNull()?.let { image ->
@@ -435,14 +443,37 @@ private fun ReferenceStrip(
     onClearReferences: () -> Unit,
     onMoveReference: (String, Int) -> Unit,
     onDeleteReference: (String) -> Unit,
+    onDeleteMultipleReferences: (List<String>) -> Unit,
     onPreview: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    var selectedIds by remember { mutableStateOf(emptySet<String>()) }
+    val currentIds = remember(references) { references.map { it.id }.toSet() }
+    LaunchedEffect(currentIds) {
+        selectedIds = selectedIds.intersect(currentIds)
+    }
+
     SurfacePanel(modifier = modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("参考图", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("${references.size} 张", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (selectedIds.isNotEmpty()) "已选 ${selectedIds.size}/${references.size} 张" else "${references.size} 张",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (selectedIds.isNotEmpty()) {
+                IconButton(onClick = {
+                    onDeleteMultipleReferences(selectedIds.toList())
+                    selectedIds = emptySet()
+                }) {
+                    Icon(Icons.Default.Delete, contentDescription = "删除已选", tint = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = {
+                    selectedIds = if (selectedIds.size == references.size) emptySet() else references.map { it.id }.toSet()
+                }) {
+                    Text(if (selectedIds.size == references.size) "取消" else "全选")
+                }
             }
             IconButton(onClick = onPickImages) {
                 Icon(Icons.Default.PhotoLibrary, contentDescription = "本地图")
@@ -466,10 +497,17 @@ private fun ReferenceStrip(
                     ReferenceTile(
                         index = index,
                         item = item,
+                        selected = item.id in selectedIds,
+                        onSelectedChange = { checked ->
+                            selectedIds = if (checked) selectedIds + item.id else selectedIds - item.id
+                        },
                         canMoveUp = index > 0,
                         canMoveDown = index < references.lastIndex,
                         onMove = onMoveReference,
-                        onDelete = onDeleteReference,
+                        onDelete = {
+                            onDeleteReference(item.id)
+                            selectedIds = selectedIds - item.id
+                        },
                         onPreview = onPreview
                     )
                 }
@@ -482,10 +520,12 @@ private fun ReferenceStrip(
 private fun ReferenceTile(
     index: Int,
     item: ReferenceImage,
+    selected: Boolean,
+    onSelectedChange: (Boolean) -> Unit,
     canMoveUp: Boolean,
     canMoveDown: Boolean,
     onMove: (String, Int) -> Unit,
-    onDelete: (String) -> Unit,
+    onDelete: () -> Unit,
     onPreview: (String) -> Unit
 ) {
     Card(
@@ -494,16 +534,25 @@ private fun ReferenceTile(
         modifier = Modifier.width(132.dp)
     ) {
         Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            AsyncImage(
-                model = item.preview,
-                contentDescription = "参考图 ${index + 1}",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1f)
-                    .clip(RoundedCornerShape(6.dp))
-                    .clickable { onPreview(item.preview) }
-            )
+            Box(modifier = Modifier.fillMaxWidth()) {
+                AsyncImage(
+                    model = item.preview,
+                    contentDescription = "参考图 ${index + 1}",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .aspectRatio(1f)
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onPreview(item.preview) }
+                )
+                Checkbox(
+                    checked = selected,
+                    onCheckedChange = onSelectedChange,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(4.dp)
+                )
+            }
             Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
                 IconButton(onClick = { onMove(item.id, -1) }, enabled = canMoveUp, modifier = Modifier.size(32.dp)) {
@@ -512,7 +561,7 @@ private fun ReferenceTile(
                 IconButton(onClick = { onMove(item.id, 1) }, enabled = canMoveDown, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Default.KeyboardArrowDown, contentDescription = "后移")
                 }
-                IconButton(onClick = { onDelete(item.id) }, modifier = Modifier.size(32.dp)) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Default.Delete, contentDescription = "删除")
                 }
             }
@@ -1129,16 +1178,20 @@ private fun CenterMessage(
 @Composable
 private fun CodeBlock(text: String, modifier: Modifier = Modifier) {
     SelectionContainer {
-        Text(
-            text = text,
+        Box(
             modifier = modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(8.dp))
                 .background(Color(0xFF020617))
-                .padding(10.dp),
-            color = Color(0xFFE5E7EB),
-            style = MaterialTheme.typography.bodySmall
-        )
+                .verticalScroll(rememberScrollState())
+        ) {
+            Text(
+                text = text,
+                modifier = Modifier.padding(10.dp),
+                color = Color(0xFFE5E7EB),
+                style = MaterialTheme.typography.bodySmall
+            )
+        }
     }
 }
 

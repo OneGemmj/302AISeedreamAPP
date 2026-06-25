@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface HistoryDao {
-    @Query("SELECT * FROM history_images ORDER BY timestamp DESC LIMIT 100")
+    @Query("SELECT * FROM history_images ORDER BY timestamp DESC")
     fun observeAll(): Flow<List<HistoryEntity>>
 
     @Query("SELECT COUNT(*) FROM history_images")
