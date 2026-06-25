@@ -32,13 +32,16 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Set version from tag
+      - name: Verify version matches tag
         if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
         run: |
           VERSION_NAME="${GITHUB_REF_NAME#v}"
-          VERSION_CODE="$(echo "$VERSION_NAME" | awk -F. '{ printf("%d%03d%03d\n", $1, $2, $3) }')"
-          echo "APP_VERSION_NAME=$VERSION_NAME" >> gradle.properties
-          echo "APP_VERSION_CODE=$VERSION_CODE" >> gradle.properties
+          DECLARED_VERSION="$(grep '^APP_VERSION_NAME=' gradle.properties | tail -n 1 | cut -d= -f2)"
+          if [ "$DECLARED_VERSION" != "$VERSION_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match APP_VERSION_NAME=$DECLARED_VERSION"
+            exit 1
+          fi
 
       - name: Test
         run: ./gradlew test --no-daemon --console=plain
@@ -64,3 +67,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: release/*.apk
+          overwrite_files: true
