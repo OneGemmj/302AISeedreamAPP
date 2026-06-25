@@ -15,6 +15,7 @@ The first implementation referenced the official 302.ai documentation:
 ## Features
 
 - Seedream 5.0 / 4.5 model selection.
+- Android 7.0 and later support (minSdk 24).
 - API key save, show/hide, clear, encrypted with Android Keystore.
 - Editable API endpoint and latency test.
 - Prompt input, multiple local reference images, URL reference images, sorting and deletion.
@@ -60,10 +61,10 @@ app/build/outputs/apk/debug/app-debug.apk
 The app version is controlled in `gradle.properties`:
 
 ```properties
-APP_VERSION_CODE=5
-APP_VERSION_NAME=1.1.3
+APP_VERSION_CODE=6
+APP_VERSION_NAME=1.1.4
 ```
 
-Before each release, increment `APP_VERSION_CODE` and keep `APP_VERSION_NAME` aligned with the Git tag. For example, tag `v1.1.3` should use `APP_VERSION_NAME=1.1.3`.
+Before each release, increment `APP_VERSION_CODE` and keep `APP_VERSION_NAME` aligned with the Git tag. For example, tag `v1.1.4` should use `APP_VERSION_NAME=1.1.4`.
 
 Pushing a `v*` tag triggers `.github/workflows/android-release.yml`, which builds the APK with GitHub Actions and uploads it to GitHub Releases. See [docs/RELEASE.md](docs/RELEASE.md) for details.

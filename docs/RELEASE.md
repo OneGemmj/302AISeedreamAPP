@@ -7,8 +7,8 @@ Use Git tags and GitHub Releases so source code and APK files stay tied to the s
 Edit `gradle.properties`:
 
 ```properties
-APP_VERSION_CODE=5
-APP_VERSION_NAME=1.1.3
+APP_VERSION_CODE=7
+APP_VERSION_NAME=1.1.5
 ```
 
 Rules:
@@ -32,10 +32,10 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ```powershell
 git add .
-git commit -m "Release v1.1.3"
-git tag v1.1.3
+git commit -m "Release v1.1.5"
+git tag v1.1.5
 git push
-git push origin v1.1.3
+git push origin v1.1.5
 ```
 
 ## 4. GitHub Release
@@ -52,7 +52,7 @@ The workflow:
 For a manually built APK, use the same file naming pattern:
 
 ```text
-Seedream-302-v1.1.3-debug.apk
+Seedream-302-v1.1.5-debug.apk
 ```
 
 Local APK backups may be kept under `releases/apk/`, but APK files should not be committed to the source repository. Publish distributable APKs through GitHub Releases.
@@ -64,20 +64,20 @@ If a release APK does not appear on GitHub:
 1. Confirm the tag was pushed:
 
 ```powershell
-git push origin v1.1.3
+git push origin v1.1.5
 ```
 
 2. If the tag already exists on GitHub but was created before the workflow file existed, recreate it:
 
 ```powershell
-git push origin :refs/tags/v1.1.3
-git tag -d v1.1.3
-git tag v1.1.3
-git push origin v1.1.3
+git push origin :refs/tags/v1.1.5
+git tag -d v1.1.5
+git tag v1.1.5
+git push origin v1.1.5
 ```
 
 3. To upload a locally built APK manually:
 
 ```powershell
-gh release upload v1.1.3 app\build\outputs\apk\debug\app-debug.apk --repo OneGemmj/302AISeedreamAPP --clobber
+gh release upload v1.1.5 app\build\outputs\apk\debug\app-debug.apk --repo OneGemmj/302AISeedreamAPP --clobber
 ```

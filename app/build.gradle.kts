@@ -16,7 +16,7 @@ android {
 
     defaultConfig {
         applicationId = "com.seedream.app"
-        minSdk = 26
+        minSdk = 24
         targetSdk = 37
         versionCode = appVersionCode
         versionName = appVersionName
