@@ -1,6 +1,6 @@
 # Seedream 302 Android
 
-[简体中文](README.zh-CN.md) | [English](README.en.md)
+[简体中文](README.md) | [English](README.en.md)
 
 Seedream 302 Android is a native Android image generation and editing app built with Kotlin, Jetpack Compose, Room, Android Keystore, and a foreground generation service.
 
@@ -64,4 +64,3 @@ APP_VERSION_NAME=1.1.3
 Before each release, increment `APP_VERSION_CODE` and keep `APP_VERSION_NAME` aligned with the Git tag. For example, tag `v1.1.3` should use `APP_VERSION_NAME=1.1.3`.
 
 Pushing a `v*` tag triggers `.github/workflows/android-release.yml`, which builds the APK with GitHub Actions and uploads it to GitHub Releases. See [docs/RELEASE.md](docs/RELEASE.md) for details.
-
