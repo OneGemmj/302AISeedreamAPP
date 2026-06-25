@@ -37,6 +37,9 @@ data class SeedreamUiState(
     val isGenerating: Boolean = false,
     val retryMessage: String? = null,
     val history: List<HistoryEntity> = emptyList(),
+    val historyTotalCount: Int = 0,
+    val historyLoadedLimit: Int = 100,
+    val historyLoading: Boolean = false,
     val historyOpen: Boolean = false,
     val historySearch: String = "",
     val fullScreenImage: String? = null

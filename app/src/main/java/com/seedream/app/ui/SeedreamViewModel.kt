@@ -31,6 +31,7 @@ import com.seedream.app.storage.HistoryEntity
 import com.seedream.app.storage.HistoryRepository
 import com.seedream.app.storage.KeyStorage
 import com.seedream.app.storage.SettingsStorage
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,6 +54,8 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
     private val referencePayloads = mutableMapOf<String, String>()
     private var lastRequest: SeedreamRequest? = null
     private var latencyJob: Job? = null
+    private var historyJob: Job? = null
+    private var historyLimit = HISTORY_PAGE_SIZE
 
     private val _uiState = MutableStateFlow(
         SeedreamUiState(
@@ -76,11 +79,7 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
     val uiState: StateFlow<SeedreamUiState> = _uiState
 
     init {
-        viewModelScope.launch {
-            historyRepository.history.collect { items ->
-                _uiState.update { it.copy(history = items) }
-            }
-        }
+        refreshHistory()
         viewModelScope.launch {
             GenerationEvents.events.collect(::handleGenerationEvent)
         }
@@ -154,7 +153,18 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
         }
     }
     fun setSearchApiKey(value: String) = _uiState.update { it.copy(searchApiKey = value) }
-    fun setHistorySearch(value: String) = _uiState.update { it.copy(historySearch = value) }
+    fun setHistorySearch(value: String) {
+        historyLimit = HISTORY_PAGE_SIZE
+        _uiState.update {
+            it.copy(
+                historySearch = value,
+                history = emptyList(),
+                historyTotalCount = 0,
+                historyLoadedLimit = historyLimit
+            )
+        }
+        refreshHistory()
+    }
     fun toggleHistory() = _uiState.update { it.copy(historyOpen = !it.historyOpen) }
     fun openImage(src: String) = _uiState.update { it.copy(fullScreenImage = src) }
     fun closeImage() = _uiState.update { it.copy(fullScreenImage = null) }
@@ -384,6 +394,7 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
     fun deleteHistory(item: HistoryEntity) {
         viewModelScope.launch {
             historyRepository.delete(item.id)
+            refreshHistory()
             setStatus("已删除历史图片 #${item.id}", StatusKind.Muted)
         }
     }
@@ -392,6 +403,7 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
         if (items.isEmpty()) return
         viewModelScope.launch {
             items.forEach { historyRepository.delete(it.id) }
+            refreshHistory()
             setStatus("已删除 ${items.size} 条历史记录", StatusKind.Muted)
         }
     }
@@ -399,6 +411,8 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
     fun clearHistory() {
         viewModelScope.launch {
             historyRepository.clearAll()
+            historyLimit = HISTORY_PAGE_SIZE
+            refreshHistory()
             setStatus("已清空全部历史记录", StatusKind.Muted)
         }
     }
@@ -431,6 +445,40 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
 
     fun historyDisplaySource(item: HistoryEntity): String = historyRepository.displaySource(item)
 
+    fun loadMoreHistory() {
+        val state = _uiState.value
+        if (state.historyLoading || state.history.size >= state.historyTotalCount) return
+        historyLimit = (historyLimit + HISTORY_PAGE_SIZE).coerceAtMost(state.historyTotalCount)
+        refreshHistory()
+    }
+
+    private fun refreshHistory() {
+        historyJob?.cancel()
+        val keyword = _uiState.value.historySearch
+        val limit = historyLimit
+        _uiState.update { it.copy(historyLoading = true, historyLoadedLimit = limit) }
+        historyJob = viewModelScope.launch {
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    historyRepository.load(limit, keyword)
+                }
+            }.onSuccess { page ->
+                _uiState.update {
+                    it.copy(
+                        history = page.items,
+                        historyTotalCount = page.totalCount,
+                        historyLoading = false,
+                        historyLoadedLimit = limit
+                    )
+                }
+            }.onFailure { error ->
+                if (error is CancellationException) return@onFailure
+                _uiState.update { it.copy(historyLoading = false) }
+                setStatus("历史记录加载失败：${error.message.orEmpty()}", StatusKind.Error)
+            }
+        }
+    }
+
     private fun handleGenerationEvent(event: GenerationEvent) {
         when (event) {
             GenerationEvent.Started -> _uiState.update {
@@ -442,8 +490,11 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
                 it.copy(isGenerating = false, retryMessage = event.message)
             }
             is GenerationEvent.RawResponse -> _uiState.update { it.copy(rawResponse = event.text) }
-            is GenerationEvent.Result -> _uiState.update {
-                it.copy(resultImages = it.resultImages + event.image)
+            is GenerationEvent.Result -> {
+                _uiState.update {
+                    it.copy(resultImages = it.resultImages + event.image)
+                }
+                refreshHistory()
             }
             is GenerationEvent.RetryScheduled -> _uiState.update {
                 it.copy(
@@ -614,6 +665,7 @@ class SeedreamViewModel(application: Application) : AndroidViewModel(application
     private companion object {
         const val MAX_REFERENCE_DIMENSION = 1280
         const val REFERENCE_JPEG_QUALITY = 82
+        const val HISTORY_PAGE_SIZE = 100
     }
 
     private data class EncodedReferenceImage(

@@ -213,6 +213,7 @@ fun SeedreamScreen(state: SeedreamUiState, viewModel: SeedreamViewModel) {
                     state = state,
                     viewModel = viewModel,
                     onSearch = viewModel::setHistorySearch,
+                    onLoadMore = viewModel::loadMoreHistory,
                     onClearAll = { confirmClearHistory = true },
                     onDownloadSelected = viewModel::saveHistoryImages,
                     onDeleteSelected = viewModel::deleteHistoryItems,
@@ -336,9 +337,7 @@ private fun CreateTab(
     onGoResults: () -> Unit
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+        modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         StatusPanel(state = state, onRetry = onRetry)
@@ -357,8 +356,8 @@ private fun CreateTab(
                 value = state.prompt,
                 onValueChange = onPromptChange,
                 label = { Text("Prompt") },
-                minLines = 5,
-                maxLines = 7,
+                minLines = 4,
+                maxLines = 5,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -372,7 +371,7 @@ private fun CreateTab(
             onDeleteReference = onDeleteReference,
             onDeleteMultipleReferences = onDeleteMultipleReferences,
             onPreview = onPreview,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.weight(1f)
         )
 
         state.resultImages.lastOrNull()?.let { image ->
@@ -448,9 +447,11 @@ private fun ReferenceStrip(
     modifier: Modifier = Modifier
 ) {
     var selectedIds by remember { mutableStateOf(emptySet<String>()) }
+    var selectionMode by remember { mutableStateOf(false) }
     val currentIds = remember(references) { references.map { it.id }.toSet() }
     LaunchedEffect(currentIds) {
         selectedIds = selectedIds.intersect(currentIds)
+        if (currentIds.isEmpty()) selectionMode = false
     }
 
     SurfacePanel(modifier = modifier) {
@@ -458,21 +459,32 @@ private fun ReferenceStrip(
             Column(modifier = Modifier.weight(1f)) {
                 Text("参考图", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(
-                    if (selectedIds.isNotEmpty()) "已选 ${selectedIds.size}/${references.size} 张" else "${references.size} 张",
+                    if (selectionMode) "已选 ${selectedIds.size}/${references.size} 张" else "${references.size} 张",
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            if (selectedIds.isNotEmpty()) {
+            if (selectionMode) {
                 IconButton(onClick = {
                     onDeleteMultipleReferences(selectedIds.toList())
                     selectedIds = emptySet()
-                }) {
+                    selectionMode = false
+                }, enabled = selectedIds.isNotEmpty()) {
                     Icon(Icons.Default.Delete, contentDescription = "删除已选", tint = MaterialTheme.colorScheme.error)
                 }
                 TextButton(onClick = {
                     selectedIds = if (selectedIds.size == references.size) emptySet() else references.map { it.id }.toSet()
                 }) {
                     Text(if (selectedIds.size == references.size) "取消" else "全选")
+                }
+                TextButton(onClick = {
+                    selectedIds = emptySet()
+                    selectionMode = false
+                }) {
+                    Text("完成")
+                }
+            } else {
+                TextButton(onClick = { selectionMode = true }, enabled = references.isNotEmpty()) {
+                    Text("选择")
                 }
             }
             IconButton(onClick = onPickImages) {
@@ -497,6 +509,7 @@ private fun ReferenceStrip(
                     ReferenceTile(
                         index = index,
                         item = item,
+                        selectionMode = selectionMode,
                         selected = item.id in selectedIds,
                         onSelectedChange = { checked ->
                             selectedIds = if (checked) selectedIds + item.id else selectedIds - item.id
@@ -520,6 +533,7 @@ private fun ReferenceStrip(
 private fun ReferenceTile(
     index: Int,
     item: ReferenceImage,
+    selectionMode: Boolean,
     selected: Boolean,
     onSelectedChange: (Boolean) -> Unit,
     canMoveUp: Boolean,
@@ -543,15 +557,23 @@ private fun ReferenceTile(
                         .fillMaxWidth()
                         .aspectRatio(1f)
                         .clip(RoundedCornerShape(6.dp))
-                        .clickable { onPreview(item.preview) }
+                        .clickable {
+                            if (selectionMode) {
+                                onSelectedChange(!selected)
+                            } else {
+                                onPreview(item.preview)
+                            }
+                        }
                 )
-                Checkbox(
-                    checked = selected,
-                    onCheckedChange = onSelectedChange,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(4.dp)
-                )
+                if (selectionMode) {
+                    Checkbox(
+                        checked = selected,
+                        onCheckedChange = onSelectedChange,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(4.dp)
+                    )
+                }
             }
             Text(item.name, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
             Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
@@ -583,13 +605,18 @@ private fun RecentResult(
                 contentDescription = "最近结果",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .size(78.dp)
+                    .size(56.dp)
                     .clip(RoundedCornerShape(8.dp))
                     .clickable { onPreview(image.src) }
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text("最近结果", fontWeight = FontWeight.SemiBold)
-                Text(image.note.ifBlank { "已生成" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    image.note.ifBlank { "已生成" },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             IconButton(onClick = { onPreview(image.src) }) {
                 Icon(Icons.Default.OpenInFull, contentDescription = "预览")
@@ -668,6 +695,7 @@ private fun HistoryTab(
     state: SeedreamUiState,
     viewModel: SeedreamViewModel,
     onSearch: (String) -> Unit,
+    onLoadMore: () -> Unit,
     onClearAll: () -> Unit,
     onDownloadSelected: (List<HistoryEntity>) -> Unit,
     onDeleteSelected: (List<HistoryEntity>) -> Unit,
@@ -676,12 +704,14 @@ private fun HistoryTab(
     onCopyLinks: (List<String>) -> Unit
 ) {
     var selectedIds by remember { mutableStateOf(emptySet<Long>()) }
-    val filtered = remember(state.history, state.historySearch) {
-        val keyword = state.historySearch.trim()
-        if (keyword.isBlank()) state.history else state.history.filter { it.prompt.contains(keyword, ignoreCase = true) }
+    val visibleItems = state.history
+    val currentIds = remember(visibleItems) { visibleItems.map { it.id }.toSet() }
+    LaunchedEffect(currentIds) {
+        selectedIds = selectedIds.intersect(currentIds)
     }
-    val selectedItems = filtered.filter { it.id in selectedIds }
+    val selectedItems = visibleItems.filter { it.id in selectedIds }
     val selectedLinks = selectedItems.mapNotNull { it.originalLink() }
+    val canLoadMore = visibleItems.size < state.historyTotalCount
 
     Column(modifier = Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SurfacePanel {
@@ -693,18 +723,26 @@ private fun HistoryTab(
                 singleLine = true
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${state.history.size} 条记录", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                if (filtered.isNotEmpty()) {
+                Text(
+                    if (state.historySearch.isBlank()) {
+                        "已加载 ${visibleItems.size}/${state.historyTotalCount} 条"
+                    } else {
+                        "匹配 ${state.historyTotalCount} 条，已加载 ${visibleItems.size}"
+                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
+                )
+                if (visibleItems.isNotEmpty()) {
                     TextButton(
                         onClick = {
-                            selectedIds = if (selectedItems.size == filtered.size) {
+                            selectedIds = if (selectedItems.size == visibleItems.size) {
                                 emptySet()
                             } else {
-                                filtered.map { it.id }.toSet()
+                                visibleItems.map { it.id }.toSet()
                             }
                         }
                     ) {
-                        Text(if (selectedItems.size == filtered.size) "取消全选" else "全选")
+                        Text(if (selectedItems.size == visibleItems.size) "取消全选" else "全选")
                     }
                 }
                 OutlinedButton(
@@ -755,14 +793,18 @@ private fun HistoryTab(
             }
         }
 
-        if (filtered.isEmpty()) {
-            CenterMessage("暂无历史", "生成图片后会自动缓存到历史。", modifier = Modifier.weight(1f))
+        if (visibleItems.isEmpty() && !state.historyLoading) {
+            CenterMessage(
+                if (state.historySearch.isBlank()) "暂无历史" else "没有匹配历史",
+                if (state.historySearch.isBlank()) "生成图片后会自动缓存到历史。" else "换个关键词再试试。",
+                modifier = Modifier.weight(1f)
+            )
         } else {
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(filtered, key = { it.id }) { item ->
+                items(visibleItems, key = { it.id }) { item ->
                     HistoryItemRow(
                         item = item,
                         imageSrc = viewModel.historyDisplaySource(item),
@@ -776,6 +818,37 @@ private fun HistoryTab(
                         onCopyLink = { link -> onCopyLinks(listOf(link)) },
                         onDelete = { viewModel.deleteHistory(item) }
                     )
+                }
+                item {
+                    if (state.historyLoading && visibleItems.isEmpty()) {
+                        Text(
+                            "正在加载历史...",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        )
+                    } else if (canLoadMore) {
+                        OutlinedButton(
+                            onClick = onLoadMore,
+                            enabled = !state.historyLoading,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (state.historyLoading) "加载中..." else "加载更多")
+                        }
+                    } else if (state.historyTotalCount > 0) {
+                        Text(
+                            "已显示全部 ${state.historyTotalCount} 条",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(12.dp)
+                        )
+                    }
                 }
             }
         }

@@ -2,15 +2,25 @@ package com.seedream.app.storage
 
 import android.content.Context
 import android.net.Uri
-import kotlinx.coroutines.flow.Flow
 import java.io.File
+
+data class HistoryPage(
+    val items: List<HistoryEntity>,
+    val totalCount: Int
+)
 
 class HistoryRepository(context: Context) {
     private val appContext = context.applicationContext
     private val dao = AppDatabase.get(appContext).historyDao()
     private val imageStorage = ImageStorage(appContext)
 
-    val history: Flow<List<HistoryEntity>> = dao.observeAll()
+    suspend fun load(limit: Int, keyword: String): HistoryPage {
+        val cleanKeyword = keyword.trim()
+        return HistoryPage(
+            items = dao.page(limit.coerceAtLeast(1), cleanKeyword),
+            totalCount = dao.countMatching(cleanKeyword)
+        )
+    }
 
     suspend fun saveGeneratedImage(src: String, prompt: String, model: String): String {
         return runCatching {
