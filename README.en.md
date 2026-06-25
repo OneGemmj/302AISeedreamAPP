@@ -1,6 +1,9 @@
-# Seedream 302 Android
+<h1 align="center">Seedream 302 Android</h1>
 
-[简体中文](README.md) | [English](README.en.md)
+<p align="center">
+  <a href="README.md">简体中文</a> |
+  <a href="README.en.md">English</a>
+</p>
 
 Seedream 302 Android is a native Android image generation and editing app built with Kotlin, Jetpack Compose, Room, Android Keystore, and a foreground generation service.
 

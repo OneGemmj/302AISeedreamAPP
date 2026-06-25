@@ -1,6 +1,9 @@
-# Seedream 302 Android
+<h1 align="center">Seedream 302 Android</h1>
 
-[简体中文](README.md) | [English](README.en.md)
+<p align="center">
+  <a href="README.md">简体中文</a> |
+  <a href="README.en.md">English</a>
+</p>
 
 Seedream 302 Android 是一个原生 Android 图像生成与编辑工具，基于 Kotlin、Jetpack Compose、Room、Android Keystore 和前台生成服务实现。
 
