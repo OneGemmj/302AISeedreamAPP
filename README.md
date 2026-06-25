@@ -59,33 +59,35 @@ app/build/outputs/apk/debug/app-debug.apk
 App 版本号在 `gradle.properties` 中维护：
 
 ```properties
-APP_VERSION_CODE=3
-APP_VERSION_NAME=1.1.1
+APP_VERSION_CODE=4
+APP_VERSION_NAME=1.1.2
 ```
 
-每次发布前都要递增 `APP_VERSION_CODE`，并让 `APP_VERSION_NAME` 与 Git 标签一致，例如 `v1.1.1` 对应 `APP_VERSION_NAME=1.1.1`。
+每次发布前都要递增 `APP_VERSION_CODE`，并让 `APP_VERSION_NAME` 与 Git 标签一致，例如 `v1.1.2` 对应 `APP_VERSION_NAME=1.1.2`。
 
 推送 `v*` 标签后，`.github/workflows/android-release.yml` 会在 GitHub Actions 中构建 APK，并上传到 GitHub Releases。详细流程见 [docs/RELEASE.md](docs/RELEASE.md)。
 
-如果 `v1.1.1` 的 APK 没有出现在 GitHub Release，请检查标签是否已经推送：
+本地可以把构建好的 APK 备份到 `releases/apk/`，但该目录下的 APK 不应提交到源码仓库；正式分发请使用 GitHub Releases。
+
+如果 `v1.1.2` 的 APK 没有出现在 GitHub Release，请检查标签是否已经推送：
 
 ```powershell
-git push origin v1.1.1
+git push origin v1.1.2
 ```
 
 如果标签已经存在但没有触发新的 workflow，可以删除远端旧标签后重新推送：
 
 ```powershell
-git push origin :refs/tags/v1.1.1
-git tag -d v1.1.1
-git tag v1.1.1
-git push origin v1.1.1
+git push origin :refs/tags/v1.1.2
+git tag -d v1.1.2
+git tag v1.1.2
+git push origin v1.1.2
 ```
 
 也可以手动把本地 APK 上传到已有发行版：
 
 ```powershell
-gh release upload v1.1.1 app\build\outputs\apk\debug\app-debug.apk --repo OneGemmj/302AISeedreamAPP --clobber
+gh release upload v1.1.2 app\build\outputs\apk\debug\app-debug.apk --repo OneGemmj/302AISeedreamAPP --clobber
 ```
 
 ## English
@@ -145,10 +147,10 @@ app/build/outputs/apk/debug/app-debug.apk
 The app version is controlled in `gradle.properties`:
 
 ```properties
-APP_VERSION_CODE=3
-APP_VERSION_NAME=1.1.1
+APP_VERSION_CODE=4
+APP_VERSION_NAME=1.1.2
 ```
 
-Before each release, increment `APP_VERSION_CODE` and keep `APP_VERSION_NAME` aligned with the Git tag. For example, tag `v1.1.1` should use `APP_VERSION_NAME=1.1.1`.
+Before each release, increment `APP_VERSION_CODE` and keep `APP_VERSION_NAME` aligned with the Git tag. For example, tag `v1.1.2` should use `APP_VERSION_NAME=1.1.2`.
 
 Pushing a `v*` tag triggers `.github/workflows/android-release.yml`, which builds the APK with GitHub Actions and uploads it to GitHub Releases. See [docs/RELEASE.md](docs/RELEASE.md) for details.
